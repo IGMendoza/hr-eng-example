@@ -1,62 +1,14 @@
-from enum import Enum
-from typing import List, Dict, Optional
+from typing import List, Dict
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 
-# -----------------------------
-# Domain Models (Pydantic)
-# -----------------------------
+from .models import (
+    BaseModel, RobotStatus, OrderStatus, Robot, Order, Edge, Graph, # domain
+    ShortestPath, DistanceMatrix, # pathfinding
+    AddOrderRequest, OrdersResponse, RobotsResponse, # api schemas
+)
 
-class RobotStatus(str, Enum):
-    IDLE = "IDLE"
-    EXECUTING = "EXECUTING"
-
-class OrderStatus(str, Enum):
-    NEW = "NEW"
-    IN_PROGRESS = "IN_PROGRESS"
-    DONE = "DONE"
-    FAILED = "FAILED"
-
-class Robot(BaseModel):
-    name: str
-    status: RobotStatus
-    node: str
-
-class Order(BaseModel):
-    name: str
-    source: str
-    target: str
-    status: OrderStatus = OrderStatus.NEW
-
-class Edge(BaseModel):
-    from_: str = Field(alias="from")
-    to: str
-    weight: float = 1.0
-
-    class Config:
-        allow_population_by_field_name = True
-        json_encoders = {RobotStatus: lambda s: s.value, OrderStatus: lambda s: s.value}
-
-class Graph(BaseModel):
-    nodes: List[str]
-    edges: List[Edge]
-
-# -----------------------------
-# API Schemas
-# -----------------------------
-
-class AddOrderRequest(BaseModel):
-    name: str
-    source: str
-    target: str
-
-# Optional: include computed assignment in future
-class OrdersResponse(BaseModel):
-    orders: List[Order]
-
-class RobotsResponse(BaseModel):
-    robots: List[Robot]
+from .pathfinding import _pathfinding, _distance_matrix
 
 # -----------------------------
 # In-memory State (Replace with DB for prod)
@@ -168,6 +120,20 @@ async def get_robots() -> RobotsResponse:
 @app.get("/getGraph", response_model=Graph, tags=["graph"])
 async def get_graph() -> Graph:
     return GRAPH
+
+@app.get("/getDistanceMatrix", response_model=DistanceMatrix, tags=["distanceMatrix"])
+async def get_distance_matrix() -> DistanceMatrix:
+    try:
+        return _distance_matrix(GRAPH)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@app.get("/path", response_model=ShortestPath)
+def get_path(start: str, target: str):
+    try:
+        return _pathfinding(GRAPH, start, target)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # -----------------------------
 # Optional: additional stubs to support simulation (Frontend can ignore)
