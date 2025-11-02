@@ -54,6 +54,24 @@ class DistanceMatrix(BaseModel):
     matrix: Dict[str, Dict[str, ShortestPath]]
 
 # -----------------------------
+# Scheduling Models
+# -----------------------------
+
+class PlannedRoute(BaseModel):
+    robot: str
+    order: str
+    path: List[str]
+    idx: int = 0
+
+class PlannedRouteSummary(BaseModel):
+    order: str
+    robot: str
+    distance_to_start: float
+    path_to_start: List[str]
+    path_to_target: List[str]
+    full_path: List[str]
+
+# -----------------------------
 # API Schemas
 # -----------------------------
 

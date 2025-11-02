@@ -4,7 +4,7 @@ import math, heapq
 
 from .models import Graph, ShortestPath, DistanceMatrix
 
-PATHFINDING_ALGOS = ["dijkstra's"]
+PATHFINDING_ALGOS = ["dijkstra"]
 
 def _build_undirected_adjacency(graph: Graph) -> Dict[str, List[Tuple[str, float]]]:
     adj: Dict[str, List[Tuple[str, float]]] = {n: [] for n in graph.nodes}
@@ -57,7 +57,7 @@ def _pathfinding(
         start: str,
         target: str, 
         adj: Optional[Dict[str, List[Tuple[str, float]]]] = None,
-        algo: Optional[str] = "dijkstra's"
+        algo: Optional[str] = "dijkstra"
     ) -> ShortestPath:
     if (algo not in PATHFINDING_ALGOS):
         raise ValueError(f"{algo} algorithm not supported")
@@ -72,7 +72,7 @@ def _pathfinding(
         adj = _build_undirected_adjacency(graph)
 
     match algo:
-        case "dijkstra's":
+        case "dijkstra":
             dist, prev = _dijkstra_single_source(adj, start)
         case _:
             dist, prev = _dijkstra_single_source(adj, start)
@@ -81,14 +81,14 @@ def _pathfinding(
     path = _reconstruct_path(prev, start, target)
     return ShortestPath(start=start, target=target, distance=dist[target], path=path)
 
-def _distance_matrix(graph: Graph, algo: str = "dijkstra's") -> DistanceMatrix:
+def _distance_matrix(graph: Graph, algo: str = "dijkstra") -> DistanceMatrix:
     if (algo not in PATHFINDING_ALGOS):
         raise ValueError(f"{algo} algorithm not supported")
     adj = _build_undirected_adjacency(graph)
     matrix: Dict[str, Dict[str, ShortestPath]] = {}
 
     for s in graph.nodes:
-        if algo == "dijkstra's":
+        if algo == "dijkstra":
             dist, prev = _dijkstra_single_source(adj, s)
         else:
             raise ValueError(f"{algo} algo not supported")

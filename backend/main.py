@@ -1,14 +1,16 @@
 from typing import List, Dict
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
+from pydantic import BaseModel
 from .models import (
-    BaseModel, RobotStatus, OrderStatus, Robot, Order, Edge, Graph, # domain
+    RobotStatus, OrderStatus, Robot, Order, Edge, Graph, # domain
     ShortestPath, DistanceMatrix, # pathfinding
+    PlannedRoute, PlannedRouteSummary, # scheduler
     AddOrderRequest, OrdersResponse, RobotsResponse, # api schemas
 )
 
 from .pathfinding import _pathfinding, _distance_matrix
+from .scheduler import assign_nearest_idle_robot
 
 # -----------------------------
 # In-memory State (Replace with DB for prod)
@@ -17,6 +19,7 @@ from .pathfinding import _pathfinding, _distance_matrix
 STATE: Dict[str, List] = {
     "orders": [],
     "robots": [],
+    "routes": [],
 }
 
 GRAPH: Graph = Graph(
@@ -85,6 +88,7 @@ async def seed_state() -> None:
     # Seed only once per process start
     STATE["orders"] = list(SEED_ORDERS)
     STATE["robots"] = list(SEED_ROBOTS)
+    STATE["routes"] = []
 
 # -----------------------------
 # Endpoints (as specified)
@@ -94,12 +98,12 @@ async def seed_state() -> None:
 async def healthz():
     return {"ok": True}
 
-@app.post("/addOrder", response_model=Order, tags=["orders"])
+@app.post("/addOrder", response_model=Order, tags=["orders"], status_code=201)
 async def add_order(req: AddOrderRequest) -> Order:
     # Validate nodes exist in graph
     nodes = _graph_nodes_set()
     if req.source not in nodes or req.target not in nodes:
-        raise HTTPException(status_code=400, detail="source/target must be valid graph nodes")
+        raise HTTPException(status_code=422, detail="source/target must be valid graph nodes")
 
     # Enforce unique order name for simplicity
     if any(o.name == req.name for o in STATE["orders"]):
@@ -133,7 +137,18 @@ def get_path(start: str, target: str):
     try:
         return _pathfinding(GRAPH, start, target)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
+    
+@app.post("/assign/{order_name}", response_model=PlannedRouteSummary, tags=["scheduling"])
+async def assign(order_name: str) -> PlannedRouteSummary:
+    try:
+        return assign_nearest_idle_robot(order_name, STATE, GRAPH)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    
+@app.get("/routes", response_model=List[PlannedRoute], tags=["simulation"])
+async def get_routes() -> List[PlannedRoute]:
+    return STATE["routes"]
 
 # -----------------------------
 # Optional: additional stubs to support simulation (Frontend can ignore)
