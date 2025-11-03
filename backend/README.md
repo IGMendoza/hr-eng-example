@@ -32,3 +32,6 @@ do:
 
 ### Task: State & Validation
 - when asking to rate my code and provide feedback, ChatGPT would "give me this task for free" by suggesting appropriate 4xx codes - which i'd then go and validate on google
+
+### Task: Tick Simulation + Collision Avoidance + Charging Logic + Idempotency & Concurrency
+- same as above

@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Dict
+from typing import List, Dict, Literal, Optional
 from pydantic import BaseModel, Field
 
 # -----------------------------
@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class RobotStatus(str, Enum):
     IDLE = "IDLE"
     EXECUTING = "EXECUTING"
+    CHARGING = "CHARGING"
 
 class OrderStatus(str, Enum):
     NEW = "NEW"
@@ -20,6 +21,7 @@ class Robot(BaseModel):
     name: str
     status: RobotStatus
     node: str
+    battery: int
 
 class Order(BaseModel):
     name: str
@@ -62,6 +64,7 @@ class PlannedRoute(BaseModel):
     order: str
     path: List[str]
     idx: int = 0
+    kind: Literal["order", "charge"] = "order"
 
 class PlannedRouteSummary(BaseModel):
     order: str
@@ -70,6 +73,31 @@ class PlannedRouteSummary(BaseModel):
     path_to_start: List[str]
     path_to_target: List[str]
     full_path: List[str]
+
+# -----------------------------
+# Tick
+# -----------------------------
+
+class MoveEvent(BaseModel):
+    robot: str
+    node: str
+    to: str
+    kind: Literal["order", "charge"]
+
+class CompletionEvent(BaseModel):
+    robot: str
+    order: Optional[str] = None
+    kind: Literal["order", "charge"]
+
+class TickResponse(BaseModel):
+    tick: int
+    moved: int
+    completed_orders: int
+    finished_charging: int
+    remaining_active_routes: int
+    moves: List[MoveEvent] = []
+    completions: List[CompletionEvent] = []
+    assignments: List[PlannedRouteSummary] = []
 
 # -----------------------------
 # API Schemas

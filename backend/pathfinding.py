@@ -3,8 +3,22 @@ from typing import List, Dict, Tuple, Optional
 import math, heapq
 
 from .models import Graph, ShortestPath, DistanceMatrix
+from .config import CHARGER_NODES
 
 PATHFINDING_ALGOS = ["dijkstra"]
+
+def _nearest_charger_path(graph: Graph, start_node: str) -> List[str]:
+    best_path = None
+    best_dist = None
+    for ch in CHARGER_NODES:
+        try:
+            sp = _pathfinding(graph, start_node, ch)
+            if best_dist is None or (sp.distance is not None and sp.distance < best_dist):
+                best_dist = sp.distance
+                best_path = sp.path
+        except ValueError:
+            continue
+    return best_path or [start_node]
 
 def _build_undirected_adjacency(graph: Graph) -> Dict[str, List[Tuple[str, float]]]:
     adj: Dict[str, List[Tuple[str, float]]] = {n: [] for n in graph.nodes}

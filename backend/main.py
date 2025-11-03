@@ -1,16 +1,21 @@
-from typing import List, Dict
-from fastapi import FastAPI, HTTPException
+from typing import List, Dict, Optional
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import asyncio
+
 from .models import (
     RobotStatus, OrderStatus, Robot, Order, Edge, Graph, # domain
     ShortestPath, DistanceMatrix, # pathfinding
     PlannedRoute, PlannedRouteSummary, # scheduler
+    MoveEvent, CompletionEvent, TickResponse, # tick
     AddOrderRequest, OrdersResponse, RobotsResponse, # api schemas
 )
 
 from .pathfinding import _pathfinding, _distance_matrix
 from .scheduler import assign_nearest_idle_robot
+from .config import LOW_BATTERY
+from .tick import tick_step
 
 # -----------------------------
 # In-memory State (Replace with DB for prod)
@@ -20,6 +25,7 @@ STATE: Dict[str, List] = {
     "orders": [],
     "robots": [],
     "routes": [],
+    "idempotency": {},
 }
 
 GRAPH: Graph = Graph(
@@ -36,9 +42,9 @@ GRAPH: Graph = Graph(
 )
 
 SEED_ROBOTS = [
-    Robot(name="R1", status=RobotStatus.IDLE, node="A"),
-    Robot(name="R2", status=RobotStatus.EXECUTING, node="C"),
-    Robot(name="R3", status=RobotStatus.IDLE, node="E"),
+    Robot(name="R1", status=RobotStatus.IDLE, node="A", battery=80),
+    Robot(name="R2", status=RobotStatus.EXECUTING, node="C", battery=70),
+    Robot(name="R3", status=RobotStatus.IDLE, node="E", battery=10),
 ]
 
 SEED_ORDERS = [
@@ -89,6 +95,9 @@ async def seed_state() -> None:
     STATE["orders"] = list(SEED_ORDERS)
     STATE["robots"] = list(SEED_ROBOTS)
     STATE["routes"] = []
+    STATE["idempotency"] = {}
+    app.state.state_lock = asyncio.Lock()
+    app.state.tick_counter = 0
 
 # -----------------------------
 # Endpoints (as specified)
@@ -99,7 +108,15 @@ async def healthz():
     return {"ok": True}
 
 @app.post("/addOrder", response_model=Order, tags=["orders"], status_code=201)
-async def add_order(req: AddOrderRequest) -> Order:
+async def add_order(
+    req: AddOrderRequest,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+) -> Order:
+    if idempotency_key:
+        cached = STATE["idempotency"].get(("addOrder", idempotency_key))
+        if cached is not None:
+            return cached
+        
     # Validate nodes exist in graph
     nodes = _graph_nodes_set()
     if req.source not in nodes or req.target not in nodes:
@@ -111,6 +128,9 @@ async def add_order(req: AddOrderRequest) -> Order:
 
     order = Order(name=req.name, source=req.source, target=req.target, status=OrderStatus.NEW)
     STATE["orders"].append(order)
+
+    if idempotency_key:
+        STATE["idempotency"][("addOrder", idempotency_key)] = order
     return order
 
 @app.get("/getOrders", response_model=OrdersResponse, tags=["orders"])
@@ -150,10 +170,28 @@ async def assign(order_name: str) -> PlannedRouteSummary:
 async def get_routes() -> List[PlannedRoute]:
     return STATE["routes"]
 
+@app.post("/tick", response_model=TickResponse, tags=["simulation"])
+async def tick(idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")) -> TickResponse:
+    if idempotency_key:
+        cached = STATE["idempotency"].get(("tick", idempotency_key))
+        if cached is not None:
+            return cached
+        
+    async with app.state.state_lock:
+        app.state.tick_counter += 1
+        tick_no = app.state.tick_counter
+
+        resp = tick_step(STATE, GRAPH, tick_no)
+
+        if idempotency_key:
+            STATE["idempotency"][("tick", idempotency_key)] = resp
+        
+        return resp
+
 # -----------------------------
 # Optional: additional stubs to support simulation (Frontend can ignore)
 # -----------------------------
-
+"""
 class Route(BaseModel):
     robot: str
     path: List[str]  # sequence of node ids
@@ -171,7 +209,7 @@ async def get_routes() -> RoutesResponse:
 async def tick() -> Dict[str, str]:
     # TODO: Advance in-memory simulation: move robots along paths, update order/robot status
     return {"status": "ok", "note": "tick advanced (no-op stub)"}
-
+"""
 # -----------------------------
 # Run (if executed directly)
 # -----------------------------

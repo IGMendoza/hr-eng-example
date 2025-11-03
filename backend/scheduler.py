@@ -9,6 +9,7 @@ from .models import (
     ShortestPath
 )
 from .pathfinding import _pathfinding
+from .config import LOW_BATTERY
 
 # -----------------------------
 # Helper functions
@@ -21,7 +22,7 @@ def _get_order(state: Dict, order_name: str) -> Order:
     raise ValueError(f"order not found: {order_name}")
 
 def _get_idle_robots(state: Dict) -> List[Robot]: 
-    idle = [r for r in state["robots"] if r.status == RobotStatus.IDLE]
+    idle = [r for r in state["robots"] if r.status == RobotStatus.IDLE and r.battery >= LOW_BATTERY]
     if not idle:
         raise ValueError("no idel robots available")
     return idle
